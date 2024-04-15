@@ -1,10 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
 	"strconv"
+	"text/template"
+
+	"snipperbox.illia-kornyk/internal/models"
 )
 
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
@@ -14,21 +17,14 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	files := []string{
-		"./ui/html/base.html",
-		"./ui/html/partials/nav.html",
-		"./ui/html/pages/home.html",
-	}
-
-	ts, err := template.ParseFiles(files...)
+	snippets, err := app.snippets.Latest()
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
 
-		err = ts.ExecuteTemplate(w,"base", nil)
-	if err  != nil {
-		app.serverError(w, err)
+	for _, snippet := range snippets {
+		fmt.Fprintf(w, "%+v\n", snippet)
 	}
 }
 
@@ -40,7 +36,33 @@ func (app *application) snippetView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Fprintf(w, "Display a specific snippet with ID %d", id)
+	snippet, err := app.snippets.Get(id)
+	if err != nil {
+		if errors.Is(err, models.ErrNoRecord) {
+			app.notFound(w)
+		} else {
+			app.serverError(w, err)
+		}
+
+		return
+	}
+
+		files := []string{
+		"./ui/html/base.html",
+		"./ui/html/partials/nav.html",
+        "./ui/html/pages/view.html",
+	}
+
+	ts, err := template.ParseFiles(files...)
+	if err != nil {
+		app.serverError(w, err)
+		return
+	}
+
+		err = ts.ExecuteTemplate(w,"base", snippet)
+	if err  != nil {
+		app.serverError(w, err)
+	}
 }
 
 func (app *application) snippetCreate(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +79,7 @@ func (app *application) snippetCreate(w http.ResponseWriter, r *http.Request) {
 
 	id, err := app.snippets.Insert(title, content, expires)
 	if err != nil {
-		        // app.serverError(w, err)
+		app.serverError(w, err)
 		return
 	}
 
